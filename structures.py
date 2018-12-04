@@ -16,31 +16,36 @@ PositionedCard = namedtuple(
 	"PositionedCard",
 	['card', 'north', 'south', 'east', 'west'])
 
+pcard = PositionedCard("card", "n", "s", "e", "w")
+Supplier = namedtuple("Supplier", ['location', 'size'])
+
 def change_neighbor(pcard, **kwargs):
 	vals = pcard.__attrs__.copy()
 	vals.update(kwargs)
 	return PositionedCard(**vals)
-
-pcard = PositionedCard("card", "n", "s", "e", "w")
-new_pcard = change_neighbor(pcard, north="something different")
-
-Supplier = namedtuple("Supplier", ['location', 'size'])
-
 
 class Hand(Object):
 
 	def __init__(self, cards):
 		self._cards = cards
 
-	def draw_cards(cards):
+	def draw_cards(self, supply):
 		#self._cards.extend(cards)
-		self._cards = self._cards + cards
+		the_cards = supply.draw_cards()
+		self.add_cards(the_cards)
+
+	def add_cards(the_cards)
+		self._cards = self._cards + the_cards
 
 
 class Supply(Object):
 
 	def __init__(self, cards):
 		self._cards = cards
+
+	def draw_cards(self, hand, number_of_cards)
+		self._cards = self.cards - number_of_cards
+
 
 
 class Catalog(Object):
@@ -89,3 +94,5 @@ class TeaCards(Object):
 	def eliminate_company(company):
 			self._companies.pop(turn_taker)
 			self._turn_takers = repeat(self._companies)
+
+			sdCc
