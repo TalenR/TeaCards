@@ -1,40 +1,43 @@
 from collections import namedtuple
 import itertools
+from copy import copy
 
 RED = "red"
 ORANGE = "orange"
 YELLOW = "yellow"
 GREEN = "green"
 BLUE = "blue"
-PURPLE = "purple"
+VIOLET = "violet"
 
-COLORS = {RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE}
+COLORS = {RED, ORANGE, YELLOW, GREEN, BLUE, VIOLET}
 NUMBERS = range(1, 6)
 
-PositionedCard = namedtuple(
-	"PositionedCard",
-	['card', 'north', 'south', 'east', 'west'])
-PositionedCard.__new__.__defaults__ = (None, None, None, None, None, None)
 
 def change_pcard(pcard, **kwargs):
-	vals = getattr(pcard).copy()
-	vals.update(kwargs)
-	return PositionedCard(**vals)
-
+	return pcard._replace(**kwargs)
+	
 def is_in(card, cards):
 	for c in cards:
 		if card is c:
 			return True
 	return False
 
+def flatten(lists):
+	return list(itertools.chain(*lists))
+
 class Card():
 	def __init__(self, colors, number):
-		self.colors=colors
-		self.number=number
+		self._colors=colors
+		self._number=number
 
 	def __str__(self):
-		return "%s  %s" % (self.colors, self.number)
+		return "%s  %s" % (self._colors, self._number)
 
+PositionedCard = namedtuple(
+	"PositionedCard",
+	['card', 'north', 'south', 'east', 'west'])
+default_card = Card(colors = {None}, number = 64)
+PositionedCard.__new__.__defaults__ = (default_card, default_card, default_card, default_card, default_card)
 
 class Hand():
 	""" contains cards as unordered Counter() object of namedtuples"""
@@ -42,15 +45,28 @@ class Hand():
 	def __init__(self, cards = []):
 		self._cards = cards
 
-
 	def cards_in(self, cards):
-		self._cards += cards
+		'''
+		updates self._cards with new cards
+		parameters:
+			cards: a list of card objects
+		'''
+		self._cards = self._cards + cards
 
 	def cards_out(self, cards):
-		self._cards -= cards
+		'''
+		removes cards from self._cards
+		parameters:
+			cards: a list of card objects
+		'''
+		cards_copy = copy(self._cards)
+		for card in cards:
+			cards_copy.remove(card)
+		self._cards = cards_copy
 
 class Supplier():
-	def __init__(self, size, location):
+
+	def __init__(self, location, size = 1):
 		self.size = size
 		self.location = location
 
@@ -62,20 +78,17 @@ class Supplier():
 
 
 class Supply():
-	""" contains cards as namedtuples in an ordered list, cards coming in and out are assumed to be Counter()s of namedtuples """
 
-	def __init__(self, cards):
+	def __init__(self, cards =[]):
 		self._cards = cards
 
 	def cards_out(self, out_cards):
-		if out_cards > len(self.cards):
-			return print('cannot supply that many cards')
-		the_cards = self.cards[:out_cards]
-		del self.cards[:out_cards]
+		the_cards = self._cards[:out_cards]
+		del self._cards[:out_cards]
 		return the_cards
 
 	def cards_in(self, cards):
-		self._cards += cards
+		self._cards = self._cards + cards
 		
 
 
@@ -85,31 +98,61 @@ class Catalog():
 	def __init__(self, positioned_cards):
 		self._cards = positioned_cards
 
-	def swap(self, old_card, new_card):
-		pcard = find_pcard(old_card)
-		change_pcard(pcard, card = new_card)
-		change_pcard(pcard.south, north = new_card)
-		change_pcard(pcard.north, south = new_card)
-		change_pcard(pcard.west, east = new_card)
-		change_pcard(pcard.east, west = new_card)
-
 	def find_pcard(self, card):
-		pcard = [pcard for pcard in self.pcards if pcard.card == card]
+		"""searcher self._cards for positioned card with card as main card. If this p-card does not exist it makes one with default attributes
+		
+		"""
+		pcard = [pcard for pcard in self._cards if pcard.card == card]
 		if pcard == []:
-			return print('this card is not in catalog')
+			pcard = [PositionedCard(card = card)]
 		return pcard[0]
 
+	def swap(self, old_card, new_card):
+		""" updates p-card of old_card with card = card, and updates its neighbors to match. Then writes these to pcards and removes the old_pcard and neighbors
+		"""
+		pcard = self.find_pcard(old_card)
+		old_neighbors = [self.find_pcard(card for card in self.get_neighbors(pcard))]
+
+		new_pcard = change_pcard(pcard, card = new_card)
+		new_neighbor_south = change_pcard(self.find_pcard(pcard.south), north = new_card)
+		new_neighbor_north = change_pcard(self.find_pcard(pcard.north), south = new_card)
+		new_neighbor_west = change_pcard(self.find_pcard(pcard.west), east = new_card)
+		new_neighbor_east = change_pcard(self.find_pcard(pcard.east), west = new_card)
+		new_neighbors = [new_neighbor_east, new_neighbor_west, new_neighbor_north, new_neighbor_south]
+
+		self._cards = self._cards + new_neighbors
+
+		for index in range(len(old_neighbors)):
+			old = old_neighbors[index]
+			if old in self._cards:
+				self._cards.remove(old)
+
+		self._cards.remove(pcard)
+		self._cards = self._cards + [new_pcard]
+
+
+	def get_neighbors(self, pcard):
+		"""return list of neighbors of pcard"""
+		return [pcard.north, pcard.south, pcard.east, pcard.west]
+	
+	def matching_neighbors(self, pcard, color, line = []):
+		""" returns list of neighbors which match the color """
+		return [card for card in self.get_neighbors(pcard) if color in card._colors and card not in line]
+
+	def line_of_color(self,card, color, pcards, line = []):
+		""" returns a list of cards which are in a line of cards each matching the color"""
+		pcard = self.find_pcard(card)
+		matching_neighbors = self.matching_neighbors(pcard, color, line)
+		if matching_neighbors == []:
+			return line
+		return [self.line_of_color(card, color, pcards, (line + matching_neighbors)) for card in matching_neighbors][0]
+
 	def get_line(self, company):
-		pcards = self.pcards
-		home_card = company.supplier.location
-		colors = home_card.colors
-		def line_of_color(card, color, pcards, line = []):
-			pcard = find_pcard(card)
-			matching_neighbors = [card for card in [pcard.north, pcard.south, pcard.east, pcard.west] if card != None and color in card.colors and card not in line]
-			if matching_neighbors == []:
-				return line
-			return [line_of_color(card, color, pcards, (line + matching_neighbors)) for card in matching_neighbors][0]
-		return set(list(itertools.chain(*[line_of_color(card, color, pcards) for color in colors])))
+		""" returns combined line_or_color for each color on company's home-card"""
+		pcards = self._cards
+		home_card = company._supplier.location
+		colors = home_card._colors
+		return set(flatten([self.line_of_color(home_card, color, pcards) for color in colors]))
 
 
 class Company():
@@ -120,70 +163,51 @@ class Company():
 		supplier: an Supplier object with size and location
 	"""
 
-	def __init__(self, name, hand, supplier):
+	def __init__(self, supplier, name = '', hand = []):
 		self.name = name
 		self._hand = hand
 		self._supplier = supplier
 
 	def take_turn(self, supply, catalog):
-		#action = input('What would you like to do? supply, operate, or trade')
-		#if action = 'operate':
-		#	operate(self, TeaCards.supply, TeaCards.catalog)
-		#if action = 'supply':
-		#	supply(self, TeaCards.supply)
-		#if action = 'trade':
-		#	inputs = input('Please provide a location, a card to swap, and payment cards. (swap_location, swap_card, payment_cards)':)
-		#		catalog.trade(self, catalog, supply, inputs)
+
 		TeaCards.take_turn()
 
 	def supply(self, supply):
 
 		hand = self._hand
 		size = self._supplier.size
-		if len(hand) < size + 1:
-			print('not enough cards to supply')
 		supply.cards_in(hand)
 		self._hand = []
 		self._supplier.upgrade()
 
 	def trade(self, catalog, supply, old_card, new_card, payment_cards):
-		cost = max(old_card.number, new_card.numer)
-		if cost > len(payment_cards):
-			print('need more cards to trade')
-		self.hand.cards_out(payment_cards)
-		self.supply.cards_in(payment_cards)
+		cost = max(old_card._number, new_card._number)
+		self._hand.cards_out(payment_cards)
+		supply.cards_in(payment_cards)
 		catalog.swap(old_card, new_card)
+		supply.cards_in([old_card])
+		self._hand.cards_out([new_card])
+
+	def draw(self, supply, number_of_cards):
+		the_cards = supply.cards_out(number_of_cards)
+		self._hand.cards_in(the_cards)
 
 	def operate(self, supply, catalog):
 		""" increases a company's hand size by either the company's line_size or supplier, whichever is smallest """
-		def draw(self, number_of_cards):
-			if number < 0 :
-				return ('cannot draw negative amount')
-			the_cards = supply.cards_out(number_of_cards)
-			self._hand.cards_in(the_cards)
-
-		supplier = self.supplier
-
-		if sum(company.hand.values()) > supplier:
-			return print('cannot operate, too many cards')
-
+		supplier = self._supplier
 		line_size = len(catalog.get_line(self))
-		difference = line - supplier
+		difference = line_size - supplier.size
 
 		if difference == 1 or difference == 0:
-			draw(supplier)
+			self.draw(supply, supplier.size)
 		elif difference >= 2:
 			company.supplier -= 1
-			if supplier == 0:
-				return print('You have under-operated out of business')
-			draw((supplier - 2)),
+			self.draw((supplier - 2)),
 		elif difference == -1:
-			draw(line_size)
+			self.draw(line_size)
 		elif difference <= -2:
 			company.supplier -= 1
-			if supplier == 0:
-				print('You have over-operated out of business')
-			draw(line)
+			self.draw(line)
 
 class TeaCards():
 
@@ -202,7 +226,7 @@ class TeaCards():
 		if turn_taker.loses_to(self._companies):
 			self.eliminate_company(turn_taker)
 
-	def eliminate_company(company):
+	def eliminate_company(self, company):
 			self._companies.pop(turn_taker)
 			self._turn_takers = repeat(self._companies)
 
