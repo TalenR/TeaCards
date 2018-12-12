@@ -2,6 +2,7 @@ from collections import namedtuple
 import itertools
 from copy import copy, deepcopy
 from itertools import cycle, islice
+import random
 
 RED = "red"
 ORANGE = "orange"
@@ -15,19 +16,33 @@ NUMBERS = range(1, 6)
 
 
 def change_pcard(pcard, **kwargs):
+	'''
+	return a copy of PositionedCard, pcard, with key-word arguments replaced with kwargs
+	'''
 	new_pcard = pcard._replace(**kwargs)
 	return new_pcard
 	
 def is_in(card, cards):
+	'''
+	determines whether an element is in a list
+	'''
 	for c in cards:
 		if card is c:
 			return True
 	return False
 
 def flatten(lists):
+	'''
+	flattens list
+	'''
 	return list(itertools.chain(*lists))
 
 class Card():
+	'''
+	attributes:
+		colors: set of colors, {COLOR, COLOR}
+		number: an integer
+	'''
 	def __init__(self, colors, number):
 		self._colors=colors
 		self._number=number
@@ -42,14 +57,14 @@ default_card = Card(colors = {None}, number = 64)
 PositionedCard.__new__.__defaults__ = (default_card, default_card, default_card, default_card, default_card)
 
 class Hand():
-	""" contains cards as unordered Counter() object of namedtuples"""
+	""" contains cards as list of Card objects"""
 
 	def __init__(self, cards = []):
 		self._cards = cards
 
 	def cards_in(self, cards):
 		'''
-		updates self._cards with new cards
+		returns a copy of self with cards added
 		parameters:
 			cards: a list of card objects
 		'''
@@ -57,7 +72,7 @@ class Hand():
 
 	def cards_out(self, cards):
 		'''
-		removes cards from self._cards
+		returns a copy of self with cards removed
 		parameters:
 			cards: a list of card objects
 		'''
@@ -67,31 +82,52 @@ class Hand():
 		return Hand(cards = cards_copy)
 
 class Supplier():
-
+	'''
+	attributes:
+		size: an integer
+		location a Card object
+	'''
 	def __init__(self, location, size = 1):
 		self._size = size
 		self._location = location
 
 	def upgrade(self):
+		''' returns a Supplier object with size attirbute increased by 1 '''
 		return Supplier(size = self._size + 1, location = self._location)
 
 	def downgrade(self):
+		''' returns a Supplier object with size attirbute decreased by 1 '''
 		return Supplier(size = self._size - 1, location = self._location)
 
 
 class Supply():
+	'''
+	attribute:
+		cards: list of card objects
+	'''
 
 	def __init__(self, cards =[]):
 		self._cards = cards
 
 	def draw(self, out_cards):
+		'''
+		parameters:
+			out_cards: integer representing number of cards to draw
+		returns the top out_cards number of cards from the supply
+		'''
 		the_cards = self._cards[:out_cards]
 		return the_cards
 
 	def cards_out(self, out_cards):
+		'''
+		parameters:
+			out_cards: integer representing number of cards to draw
+		returns copy of self with out_card number of cards removed
+		'''
 		return Supply(cards = self._cards[out_cards:])
 
 	def cards_in(self, cards):
+		''' returns copy of self with cards added '''
 		return Supply(cards = self._cards + cards)
 		
 
@@ -103,8 +139,7 @@ class Catalog():
 		self._cards = positioned_cards
 
 	def find_pcard(self, card):
-		"""searcher self._cards for positioned card with card as main card. If this p-card does not exist it makes one with default attributes
-		
+		"""searches self._cards for positioned card with card as main card. If this p-card does not exist it makes one with default attributes
 		"""
 		pcard = [pcard for pcard in self._cards if pcard.card == card]
 		if pcard == []:
@@ -112,7 +147,11 @@ class Catalog():
 		return pcard[0]
 
 	def swap(self, old_card, new_card):
-		""" updates p-card of old_card with card = card, and updates its neighbors to match. Then writes these to pcards and removes the old_pcard and neighbors
+		""" updates p-card of old_card with card = new_card, and updates its neighbors to match. Then writes these to pcards and removes the old_pcard and neighbors
+		paramenters:
+			old_card: Card object
+			new_card: Card object
+		returns a copy of self with the pcards updated
 		"""
 		pcard = self.find_pcard(old_card)
 		old_neighbors = [self.find_pcard(card) for card in self.get_neighbors(pcard)]
@@ -152,7 +191,7 @@ class Catalog():
 		pcards = self._cards
 		home_card = company._supplier._location
 		colors = home_card._colors
-		return set(flatten([self.line_of_color(home_card, color, pcards) for color in colors]))
+		return set(flatten([self.line_of_color(home_card, color, pcards) for color in colors]) + [home_card])
 
 
 class Company():
@@ -163,105 +202,144 @@ class Company():
 		supplier: an Supplier object with size and location
 	"""
 
-	def __init__(self, supplier, name = '', hand = []):
+	def __init__(self, supplier, name = '', hand = [], deck = ''):
 		self._name = name
 		self._hand = hand
 		self._supplier = supplier
+		self._deck = deck
 
-	def supply(self, supply):
+	def get_deck(deck_file):
+		''' builds a list of card objects
+		parameters:
+			deck_file: a csv file containing lines of form {COLOR, COLOR}, number
+		returns a list of Card objects obtained from the deck_file
+		'''
+		with open(deck_file) as f:
+			r = np.genfromtxt(f, dtype=str, delimiter = ',')
+			deck = []
+			for i in range(len(r)):
+				colors = set(r[i][0].split(' '))
+				number = int(r[i][1])
+				deck.append(Card(colors = colors, number = number))
+		return deck
 
-		hand = self._hand
-		size = self._supplier._size
-		supply.cards_in(hand)
-		self._hand = []
-		self._supplier.upgrade()
-
-	def trade(self, catalog, supply, old_card, new_card, payment_cards):
-		cost = max(old_card._number, new_card._number)
-		self._hand.cards_out(payment_cards)
-		supply.cards_in(payment_cards)
-		catalog.swap(old_card, new_card)
-		supply.cards_in([old_card])
-		self._hand.cards_out([new_card])
-
-	def draw(self, supply, number_of_cards):
-		the_cards = supply.cards_out(number_of_cards)
-		self._hand.cards_in(the_cards)
-'''
-	def operate(self, company, supply, catalog):
-		""" increases a company's hand size by either the company's line_size or supplier, whichever is smallest """
-		supplier = company._supplier._size
-		line_size = len(catalog.get_line(self))
-		difference = line_size - supplier._size
-		hand = company._hand
-
-		if difference == 1 or difference == 0:
-			new_supply = supply.cards_out(line_size)
-			new_hand = hand.in
-		elif difference >= 2:
-			company.supplier -= 1
-			self.draw((supplier - 2)),
-		elif difference == -1:
-			self.draw(line_size)
-		elif difference <= -2:
-			company.supplier -= 1
-			self.draw(line)'''
 
 class TeaCards():
+	'''
+	attriubtes:
+		catalog: a Catalog object
+		companies: a list of companie objects
+		supply: a Supply object
+	'''
 
-	def __init__(self, catalog, companies, supply):
+	def __init__(self, catalog = [], companies = [], supply = []):
 		self._catalog = catalog
 		self._companies = companies
 		self._supply = supply
 		self._turn_takers = cycle(companies)
 
-	def take_turn(self):
-		turn_taker = next(self._turn_takers)
-		catalog, supply = turn_taker.take_turn()
-		self._catalog = catalog
-		self._supply = supply
+	def take_turn(self, turn_taker):
+		''' takes user input to perform a turn action.
+		parameters: 
+			turn_taker: a Company object
+		returns a call to take_turn with next turn taker in list of companies
+		'''
+		action = input("What would you like to do? operate, trade, or supply")
 
-		if turn_taker.loses_to(self._companies):
-			self.eliminate_company(turn_taker)
+		if action == 'operate':
+			supply = self._supply
+			catalog = self._catalog
+			new_tea_cards = self.operate(turn_taker, supply, catalog)
 
-	def eliminate_company(self):
-			self._companies.pop(turn_taker)
-			self._turn_takers = repeat(self._companies)
+		elif action == 'supply':
+			new_company = self.supply(turn_taker)
+
+		elif action == 'trade':
+			old_card = input("Which card would you like to replace?")
+			new_card = input("Which card would you like to replace it with?")
+			payment_cards = input("Which cards would you like to pay with?")
+			supply = self._supply
+			catalog = self._catalog
+
+			new_tea_cards = self.trade(turn_taker, catalog, supply, old_card, new_card, payment_cards)
+		else:
+		 return self.take_turn(turn_taker)
+
+		company_sizes = [comp._supplier._size for comp in new_tea_cards._companies]
+		if max(company_sizes) - turn_taker._supplier._size >= 2:
+			new_tea_cards._companies.pop(turn_taker)
+		if len(self.companies) == 1:
+			return endgame()
+		next_turn_taker = next(new_tea_cards._turn_takers)
+		return new_tea_cards.take_turn(next_turn_taker)
 
 	def get_company(self, company):
 		return self._companies[self._companies.index(company)]
 
 	def replace_company(self, company, new_company):
-		self._companies[self._companies.index(company)] = new_company
-
-
-
+		''' returns a copy of self.companies with company replaced by new_company '''
+		companies = deepcopy(self._companies)
+		companies[self._companies.index(company)] = new_company
+		return companies
 
 	def supply(self, company):
-		new_supply = self._supply.cards_in(company._hand)
-		new_supplier = company._supplier.upgrade()
+		''' empties a copmanies hand in to the supply and upgrades the company's supplier '''
+		hand = company._hand
+		size = company._supplier._size
+		try:
+			hand._cards[size]
+		except IndexError:
+			('not enough cards')
+			return self
+		else:
+			new_supply = self._supply.cards_in(company._hand._cards)
+			new_supplier = company._supplier.upgrade()
 
-		new_company = deepcopy(company)
-		new_company._supplier = new_supplier
-		new_company._hand = []
-		self._supply = new_supply
-		self.replace_company(company, new_company)
+			new_company = deepcopy(company)
+			new_company._supplier = new_supplier
+			new_company._hand = []
+			new_companies = self.replace_company(company, new_company)
+
+			return TeaCards(supply = new_supply, catalog = self._catalog, companies = new_companies)
 
 	def trade(self, company, catalog, supply, old_card, new_card, payment_cards):
+		''' replaces a card in the catalog with a card from a hand 
+		parameters:
+			company: a Company object
+			catalog: a Catalog object
+			supply: a Supply object
+			old_card: Card object that is in the catalog
+			new_card: Card object that is the company's hand
+			payment_cards: list of Card objects that are in company's hand
+		returns a copy of self with catalog update with new_card
+		'''
+		hand = company._hand
 		cost = max(old_card._number, new_card._number)
-		new_hand = company._hand.cards_out(payment_cards + [new_card])
-		new_supply = supply.cards_in(payment_cards + [old_card])
-		new_catalog = catalog.swap(old_card, new_card)
+		try:
+			hand._cards[cost - 1]
+		except IndexError:
+			('not enough cards')
+			return self
+		else:
+			new_hand = company._hand.cards_out(payment_cards + [new_card])
+			new_supply = supply.cards_in(payment_cards + [old_card])
+			new_catalog = catalog.swap(old_card, new_card)
 
-		new_company = deepcopy(company)
-		new_company._hand = new_hand
+			new_company = deepcopy(company)
+			new_company._hand = new_hand
+			new_companies = self.replace_company(company, new_company)
+			
+			return TeaCards(supply = new_supply, catalog = new_catalog, companies = new_companies)
 
-		self.replace_company(company, new_company)
-		self._supply = new_supply
-		self._catalog = new_catalog
 
 	def operate(self, company, supply, catalog):
-		""" increases a company's hand size by either the company's line_size or supplier, whichever is smallest """
+		""" increases a company's hand size by either the company's line_size or supplier, whichever is smallest 
+		parameters:
+			company: Company object
+			supply: Supply object
+			catalog: Catalog object
+		returns a copy of self with cards added to company, and removed from supply. Downgrades company supplier if supplier's size is too far from the size of its line
+		"""
 		supplier = company._supplier
 		size = supplier._size
 		line_size = len(catalog.get_line(company))
@@ -272,16 +350,13 @@ class TeaCards():
 			hand = hand.cards_in(supply.draw(size))
 			supply = supply.cards_out(size)
 		elif difference >= 2:
-			print('over operation')
 			supplier = supplier.downgrade()
 			hand = hand.cards_in(supply.draw(size - 2))
 			supply = supply.cards_out(size - 2)
 		elif difference == -1:
-			print('just under operate')
 			hand = hand.cards_in(supply.draw(line_size))
 			supply = supply.cards_out(line_size)
 		elif difference <= -2:
-			print('underoperate')
 			supplier = supplier.downgrade()
 			hand = hand.cards_in(supply.draw(line_size))
 			supply = supply.cards_out(line_size)
@@ -289,28 +364,65 @@ class TeaCards():
 		new_company = deepcopy(company)
 		new_company._hand = hand
 		new_company._supplier = supplier
-		self.replace_company(company, new_company)
-		self._supply = supply
+		new_companies = self.replace_company(company, new_company)
 
-	def initiate_game(self, deck_file, companies,catalog_shape):
+		return TeaCards(supply = supply, catalog = catalog, companies = new_companies)
 
-		def get_deck(deck_file):
-			with open(deck_file) as f:
-				r = np.genfromtxt(f, dtype=str, delimiter = ',')
-				deck = []
-				for i in range(len(r)):
-					colors = set(r[i][0].split(' '))
-					number = int(r[i][1])
-					deck.append(Card(colors,number))
-			return deck
+	def build_supply(self, companies):
+		supply = []
+		for company in companies:
+			supply = supply + company.build_deck(company._deck)
+		return random.sample(supply, len(supply))
 
-		self.supply = get_deck(deck_file)
+class PlayerHuman():
 
-		get_deck(deck_file)
+	def __init__(self, company, name = ''):
+		self._company = company
+		self._name = name
 
-		def build_catalog(decK):
-			pass
+	def take_turn(self, tea_cards):
+''' takes user input to perform a turn action.
+		parameters: 
+			turn_taker: a Company object
+		returns a call to take_turn with next turn taker in list of companies
+		'''
+		
+		action = input("What would you like to do? operate, trade, or supply")
 
-		build_catalog(self.supply)
+		if action == 'operate':
+			supply = tea_cards._supply
+			catalog = tea_cards._catalog
+			return tea_cards.operate(turn_taker, supply, catalog)
+
+		elif action == 'supply':
+			return tea_cards.supply(turn_taker)
+
+		elif action == 'trade':
+			old_card = input("Which card would you like to replace?")
+			new_card = input("Which card would you like to replace it with?")
+			payment_cards = input("Which cards would you like to pay with?")
+			supply = tea_cards._supply
+			catalog = tea_cards._catalog
+
+			return tea_cards.trade(turn_taker, catalog, supply, old_card, new_card, payment_cards)
+		else:
+		 return tea_cards.take_turn(turn_taker)
+
+		company_sizes = [comp._supplier._size for comp in new_tea_cards._companies]
+
+		
+			
+class PlayerComputer():
+
+class Game():
+
+	def __init__(self, players = [], tea_cards):
+		self._players = players
+		self._tea_cards = tea_cards
+		self._turn_takers = cycle(players)
+
+
+
+
 
 

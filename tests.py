@@ -26,7 +26,7 @@ class Test_Pure_Functions(unittest.TestCase):
 
 
 	def test_is_in(self):
-		card = Card({'red','green'}, 4)
+		card = Card({RED,GREEN}, 4)
 		self.assertFalse(structures.is_in(card, cards))
 		new_cards = cards + [card]
 		self.assertTrue(structures.is_in(card, new_cards))
@@ -158,60 +158,7 @@ class Test_Catalog_get_line(unittest.TestCase):
 		self.assertEqual(catalog.get_line(company), {cards[0], cards[1], cards[2]})
 
 #	Tests for Company methods
-'''
-class Test_Company_supply(unittest.TestCase):
 
-	def test_supply_one_to_two(self):
-		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = cards)
-		supply = Supply(cards = [])
-		company.supply(supply)
-		self.assertEqual(company._supplier._size, 2)
-		self.assertEqual(company._hand, [])
-		self.assertEqual(supply._cards, cards)
-
-class Test_Company_trade(unittest.TestCase):
-
-	def test_trade_basic(self):
-		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = Hand(cards = cards) )
-		catalog = Catalog(positioned_cards = pcards)
-		supply = Supply(cards = [])
-		old_card = cards[0]
-		new_card = Card(colors = {BLUE, VIOLET}, number = 2)
-		payment_cards = company._hand._cards[:2]
-
-		company._hand.cards_in([new_card])
-
-		old_neighbors = catalog.get_neighbors(catalog.find_pcard(old_card))
-		
-		company.trade(catalog, supply, old_card, new_card, payment_cards)
-
-		new_neighbors = catalog.get_neighbors(catalog.find_pcard(new_card))
-		new_supply = payment_cards + [old_card]
-
-		self.assertEqual(new_supply, supply._cards)
-		self.assertEqual(company._hand._cards, [cards[2]])
-		self.assertEqual(new_neighbors, old_neighbors)
-'''
-'''
-class Test_Company_draw(unittest.TestCase):
-
-	def test_draw(self):
-		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = Hand(cards = []))
-		supply = Supply(cards = copy(cards))
-		company.draw(supply, 2)
-		self.assertEqual(supply._cards, [cards[2]])
-		self.assertEqual(set(company._hand._cards), set(cards[:2]))
-
-class Test_Company_operate(unittest.TestCase):
-
-	def test_operate_base(self):
-		company = Company(supplier = Supplier(size = 2, location = cards[0]), hand = Hand(cards = []))
-		supply = Supply(cards = copy(cards))
-		catalog = Catalog(positioned_cards = copy(pcards))
-		company.operate(supply, catalog)
-
-		self.assertEqual(len(company._hand._cards), 2)
-'''
 #	Test methods on TeaCards
 
 class Test_TeaCards_get_company(unittest.TestCase):
@@ -227,23 +174,34 @@ class Test_TeaCards_replace_company(unittest.TestCase):
 		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = cards)
 		tea_cards = TeaCards(catalog = [], supply = [], companies = [company])
 		new_company = Company(supplier = Supplier(size = 3, location = cards[0]), hand = cards)
-		tea_cards.replace_company(company, new_company)
-		self.assertEqual(tea_cards._companies[0], new_company)
+		new_companies = tea_cards.replace_company(company, new_company)
+		self.assertEqual(new_companies[0], new_company)
 
 
 class Test_TeaCards_supply(unittest.TestCase):
 
 	def test_supply_one_to_two(self):
-		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = cards, name = 'comp')
+		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = Hand( cards = cards), name = 'comp')
 		supply = Supply(cards = [])
 		tea_cards = TeaCards(catalog = [], supply = supply, companies = [company])
 
 		new_company = Company(supplier = Supplier(size = 2, location = company._supplier._location))
 
-		tea_cards.supply(company)
-		self.assertEqual(tea_cards._companies[0]._supplier._size, 2)
-		self.assertEqual(tea_cards._companies[0]._hand, [])
-		self.assertEqual(tea_cards._supply._cards, cards)
+		new_tea_cards = tea_cards.supply(company)
+		self.assertEqual(new_tea_cards._companies[0]._supplier._size, 2)
+		self.assertEqual(new_tea_cards._companies[0]._hand, [])
+		self.assertEqual(new_tea_cards._supply._cards, cards)
+
+	def test_supply_not_enough(self):
+		company = Company(supplier = Supplier(size = 5, location = cards[0]), hand = Hand(cards = []), name = 'comp')
+		supply = Supply(cards = [])
+		tea_cards = TeaCards(catalog = [], supply = supply, companies = [company])
+
+		new_tea_cards = tea_cards.supply(company)
+
+		self.assertEqual(tea_cards.supply(company), tea_cards)
+
+
 
 class Test_TeaCards_trade(unittest.TestCase):
 
@@ -263,11 +221,23 @@ class Test_TeaCards_trade(unittest.TestCase):
 
 		new_supply = payment_cards + [old_card]
 
-		tea_cards.trade(company, catalog, supply, old_card, new_card, payment_cards)
+		new_tea_cards = tea_cards.trade(company, catalog, supply, old_card, new_card, payment_cards)
+
 		new_neighbors = tea_cards._catalog.get_neighbors(catalog.find_pcard(new_card))
 
-		self.assertEqual(new_supply, tea_cards._supply._cards)
-		self.assertEqual(tea_cards._companies[0]._hand._cards, [cards[2]])
+		self.assertEqual(new_supply, new_tea_cards._supply._cards)
+		self.assertEqual(new_tea_cards._companies[0]._hand._cards, [cards[2]])
+
+	def test_trade_not_enough(self):
+		catalog = Catalog(positioned_cards = pcards)
+		supply = Supply(cards = [])
+		old_card = cards[0]
+		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = Hand(cards = []) )
+		payment_cards = []
+
+		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
+
+		self.assertEqual(tea_cards, tea_cards.trade(company, catalog, supply, old_card, cards[0], payment_cards))
 
 class Test_TeaCards_operate(unittest.TestCase):
 	
@@ -277,9 +247,9 @@ class Test_TeaCards_operate(unittest.TestCase):
 		company = Company(supplier = Supplier(size = 2, location = cards[0]), hand = Hand(cards = []))
 		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
 
-		tea_cards.operate(company, supply, catalog)
+		new_tea_cards = tea_cards.operate(company, supply, catalog)
 
-		self.assertEqual(tea_cards._supply._cards, [cards[2]])
+		self.assertEqual(new_tea_cards._supply._cards, [cards[2]])
 	
 	def test_operate_over(self):
 		supply = Supply(cards = cards)
@@ -287,11 +257,10 @@ class Test_TeaCards_operate(unittest.TestCase):
 		company = Company(supplier = Supplier(size = 5, location = cards[0]), hand = Hand(cards = []))
 		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
 
-		tea_cards.operate(company, supply, catalog)
-		print(supply.draw(3), 'DRAW')
-		self.assertEqual(tea_cards._supply._cards, [])
-		self.assertEqual(tea_cards._companies[0]._supplier._size, 4)
-		self.assertEqual(tea_cards._companies[0]._hand._cards, cards)
+		new_tea_cards = tea_cards.operate(company, supply, catalog)
+		self.assertEqual(new_tea_cards._supply._cards, [])
+		self.assertEqual(new_tea_cards._companies[0]._supplier._size, 4)
+		self.assertEqual(new_tea_cards._companies[0]._hand._cards, cards)
 
 	def test_operate_under(self):
 		supply = Supply(cards = cards)
@@ -302,14 +271,54 @@ class Test_TeaCards_operate(unittest.TestCase):
 		company = Company(supplier = Supplier(size = 2, location = additional_card), hand = Hand(cards = []))
 		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
 
-		tea_cards.operate(company, supply, catalog)
+		new_tea_cards = tea_cards.operate(company, supply, catalog)
 
-		self.assertEqual(tea_cards._companies[0]._supplier._size, 0)
+		self.assertEqual(new_tea_cards._companies[0]._supplier._size, 1)
+		self.assertEqual(new_tea_cards._supply._cards, cards)
+		self.assertEqual(new_tea_cards._companies[0]._hand._cards, [])
 
+	def test_operate_under_1(self):
+		supply = Supply(cards = cards)
+		additional_card = Card(colors = {BLUE, RED}, number = 1)
+		additional_pcard = PositionedCard(card = additional_card, north = cards[0], south = cards[1], east = cards[2], west = cards[0])
+		new_pcards = pcards + [additional_pcard]
+		catalog = Catalog(positioned_cards = new_pcards)
+		company = Company(supplier = Supplier(size = 3, location = additional_card), hand = Hand(cards = []))
+		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
 
+		new_tea_cards = tea_cards.operate(company, supply, catalog)
+
+		self.assertEqual(new_tea_cards._companies[0]._supplier._size, 3)
+		self.assertEqual(new_tea_cards._supply._cards, [])
+		self.assertEqual(new_tea_cards._companies[0]._hand._cards, cards)
+'''
+class Test_TeaCards_take_turn(unittest.TestCase):
+
+	def test_test_take_turn(self):
+
+		supply = Supply(cards = cards)
+		catalog = Catalog(positioned_cards = pcards)
+		companyA = Company(supplier = Supplier(size = 5, location = cards[0]), hand = Hand(cards = []), name = 'CompB')
+		companyB = Company(supplier = Supplier(size = 5, location = cards[2]), hand = Hand(cards = cards), name = 'CompA')
+		companyC = Company(supplier = Supplier(size = 5, location = cards[2]), hand = Hand(cards = cards), name = 'Compc')
+
+		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [companyA, companyB, companyC])
+
+		tea_cards.take_turn(companyA)
+
+		self.assertEqual(tea_cards._turn_takers, companyB)
+		new_tea_cards = tea_cards.supply(companyB)
+
+		new_tea_cards.take_turn()
+
+		newer_tea_cards = new_tea_cards.supply(companyA)
+
+		newer_tea_cards.take_turn()
+'''
 
 
 
 
 if __name__ == '__main__':
     unittest.main()
+
