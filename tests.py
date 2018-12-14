@@ -1,9 +1,10 @@
 import unittest
 import structures
-from structures import Card, PositionedCard, Hand, Supplier, Supply, Catalog, default_card, Company, flatten, TeaCards
+from structures import Card, PositionedCard, Hand, Supplier, Supply, Catalog, default_card, Company, flatten, TeaCards, PlayerHuman
 from structures import RED, ORANGE, YELLOW, GREEN, BLUE, VIOLET
 from collections import namedtuple
-from copy import copy
+from copy import copy, deepcopy
+from unittest.mock import patch
 
 cards = [Card({RED, GREEN}, 1), Card({RED, GREEN}, 2), Card({ORANGE, RED}, 3)]
 pcards = [PositionedCard(cards[0], north = cards[1], east = cards[2]), PositionedCard(cards[1], south = cards[0]), PositionedCard(cards[2], west = cards[0])]
@@ -187,7 +188,7 @@ class Test_TeaCards_supply(unittest.TestCase):
 
 		new_company = Company(supplier = Supplier(size = 2, location = company._supplier._location))
 
-		new_tea_cards = tea_cards.supply(company)
+		new_tea_cards = tea_cards.supply(company, tea_cards)
 		self.assertEqual(new_tea_cards._companies[0]._supplier._size, 2)
 		self.assertEqual(new_tea_cards._companies[0]._hand, [])
 		self.assertEqual(new_tea_cards._supply._cards, cards)
@@ -197,9 +198,9 @@ class Test_TeaCards_supply(unittest.TestCase):
 		supply = Supply(cards = [])
 		tea_cards = TeaCards(catalog = [], supply = supply, companies = [company])
 
-		new_tea_cards = tea_cards.supply(company)
+		new_tea_cards = tea_cards.supply(company, tea_cards)
 
-		self.assertEqual(tea_cards.supply(company), tea_cards)
+		self.assertEqual(tea_cards.supply(company, tea_cards), tea_cards)
 
 
 
@@ -212,7 +213,7 @@ class Test_TeaCards_trade(unittest.TestCase):
 		old_card = cards[0]
 		new_card = Card(colors = {BLUE, VIOLET}, number = 2)
 		new_cards = flatten([cards, [new_card]])
-		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = Hand(cards = new_cards) )
+		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = Hand(cards = new_cards))
 		payment_cards = company._hand._cards[:2]
 
 		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
@@ -221,7 +222,7 @@ class Test_TeaCards_trade(unittest.TestCase):
 
 		new_supply = payment_cards + [old_card]
 
-		new_tea_cards = tea_cards.trade(company, catalog, supply, old_card, new_card, payment_cards)
+		new_tea_cards = tea_cards.trade(tea_cards, company, catalog, supply, old_card, new_card, payment_cards)
 
 		new_neighbors = tea_cards._catalog.get_neighbors(catalog.find_pcard(new_card))
 
@@ -232,12 +233,12 @@ class Test_TeaCards_trade(unittest.TestCase):
 		catalog = Catalog(positioned_cards = pcards)
 		supply = Supply(cards = [])
 		old_card = cards[0]
-		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = Hand(cards = []) )
+		company = Company(supplier = Supplier(size = 1, location = cards[0]), hand = Hand(cards = []))
 		payment_cards = []
 
 		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
 
-		self.assertEqual(tea_cards, tea_cards.trade(company, catalog, supply, old_card, cards[0], payment_cards))
+		self.assertEqual(tea_cards, tea_cards.trade(tea_cards, company, catalog, supply, old_card, cards[0], payment_cards))
 
 class Test_TeaCards_operate(unittest.TestCase):
 	
@@ -247,7 +248,7 @@ class Test_TeaCards_operate(unittest.TestCase):
 		company = Company(supplier = Supplier(size = 2, location = cards[0]), hand = Hand(cards = []))
 		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
 
-		new_tea_cards = tea_cards.operate(company, supply, catalog)
+		new_tea_cards = tea_cards.operate(tea_cards = tea_cards, company = company, supply = supply, catalog = catalog)
 
 		self.assertEqual(new_tea_cards._supply._cards, [cards[2]])
 	
@@ -257,7 +258,7 @@ class Test_TeaCards_operate(unittest.TestCase):
 		company = Company(supplier = Supplier(size = 5, location = cards[0]), hand = Hand(cards = []))
 		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
 
-		new_tea_cards = tea_cards.operate(company, supply, catalog)
+		new_tea_cards = tea_cards.operate(tea_cards, company, supply, catalog)
 		self.assertEqual(new_tea_cards._supply._cards, [])
 		self.assertEqual(new_tea_cards._companies[0]._supplier._size, 4)
 		self.assertEqual(new_tea_cards._companies[0]._hand._cards, cards)
@@ -271,7 +272,7 @@ class Test_TeaCards_operate(unittest.TestCase):
 		company = Company(supplier = Supplier(size = 2, location = additional_card), hand = Hand(cards = []))
 		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
 
-		new_tea_cards = tea_cards.operate(company, supply, catalog)
+		new_tea_cards = tea_cards.operate(tea_cards, company, supply, catalog)
 
 		self.assertEqual(new_tea_cards._companies[0]._supplier._size, 1)
 		self.assertEqual(new_tea_cards._supply._cards, cards)
@@ -286,38 +287,54 @@ class Test_TeaCards_operate(unittest.TestCase):
 		company = Company(supplier = Supplier(size = 3, location = additional_card), hand = Hand(cards = []))
 		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [company])
 
-		new_tea_cards = tea_cards.operate(company, supply, catalog)
+		new_tea_cards = tea_cards.operate(tea_cards, company, supply, catalog)
 
 		self.assertEqual(new_tea_cards._companies[0]._supplier._size, 3)
 		self.assertEqual(new_tea_cards._supply._cards, [])
 		self.assertEqual(new_tea_cards._companies[0]._hand._cards, cards)
-'''
-class Test_TeaCards_take_turn(unittest.TestCase):
+
+class Test_PlayerHuman_take_turn(unittest.TestCase):
 
 	def test_test_take_turn(self):
 
+
 		supply = Supply(cards = cards)
 		catalog = Catalog(positioned_cards = pcards)
-		companyA = Company(supplier = Supplier(size = 5, location = cards[0]), hand = Hand(cards = []), name = 'CompB')
-		companyB = Company(supplier = Supplier(size = 5, location = cards[2]), hand = Hand(cards = cards), name = 'CompA')
+		Talen = PlayerHuman(name = 'Talen')
+		player2 = PlayerHuman(name = 'player2')
+		companyA = Company(supplier = Supplier(size = 5, location = cards[0]), hand = Hand(cards = []), name = 'CompB', player = Talen)
+		companyB = Company(supplier = Supplier(size = 5, location = cards[2]), hand = Hand(cards = cards), name = 'CompA', player = player2)
 		companyC = Company(supplier = Supplier(size = 5, location = cards[2]), hand = Hand(cards = cards), name = 'Compc')
+		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [companyA, companyB], turn_taker = companyA)
 
-		tea_cards = TeaCards(supply = supply, catalog = catalog, companies = [companyA, companyB, companyC])
+		#with patch('builtins.input', return_value = "operate"):
+			#self.assertEqual(Talen.take_turn(tea_cards, companyA)._supply._cards, tea_cards.operate(tea_cards, companyA, supply, catalog)._supply._cards)
+			#self.assertEqual(Talen.take_turn(tea_cards, companyA)._catalog._cards, tea_cards.operate(tea_cards, companyA, supply, catalog)._catalog._cards)
+			#self.assertEqual(Talen.take_turn(tea_cards, companyA)._turn_taker._name, tea_cards.operate(tea_cards, companyA, supply, catalog)._turn_taker._name)
 
-		tea_cards.take_turn(companyA)
 
-		self.assertEqual(tea_cards._turn_takers, companyB)
-		new_tea_cards = tea_cards.supply(companyB)
 
-		new_tea_cards.take_turn()
+Talen = PlayerHuman(name = 'Talen')
+player2 = PlayerHuman(name = 'player2')
+catalog = Catalog(positioned_cards = pcards)
+supply = Supply(cards = cards)
+companyA = Company(supplier = Supplier(size = 3, location = cards[2]), player = Talen, name = 'CompA')
+companyB = Company(supplier = Supplier(location = cards[0]), player = player2, name = 'CompB')
 
-		newer_tea_cards = new_tea_cards.supply(companyA)
-
-		newer_tea_cards.take_turn()
+tea_cards = TeaCards(catalog = catalog, supply = supply, companies = [companyA, companyB], turn_taker = companyA)
 '''
+tea_cards.play(tea_cards)
+'''
+new = tea_cards.operate(tea_cards, companyA, supply, catalog)
 
+print(new._turn_taker._name)
+other = deepcopy(tea_cards)
+print('original', tea_cards._companies[0])
+print('copy', new._companies[0])
+#with patch('builtins.input', return_value = "operate"):
+#	news = Talen.take_turn(other, companyA)
 
-
+#print(news._turn_taker._name)
 
 if __name__ == '__main__':
     unittest.main()
